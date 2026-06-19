@@ -1,2 +1,2 @@
 # CS 3502 Operating Systems
-My coursework for Operating Systeme
+My coursework for Operating Systems
