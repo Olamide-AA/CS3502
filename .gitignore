@@ -11,3 +11,8 @@ logwriter
 #Editor backups
 *~
 *.swp
+# Assignment 2 binaries
+assignment2/c-programs/producer
+assignment2/c-programs/consumer
+assignment2/c-programs/cleanup.sh
+
