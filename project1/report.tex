@@ -1,0 +1,144 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{float}
+
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+\title{CS 3502 Project 1 \\ Multi-Threaded Banking System}
+\author{Olamide LASTNAME \\ Kennesaw State University}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This project implements a multi-threaded banking transaction system in C using POSIX threads. The system is built in four phases. Phase 1 demonstrates race conditions caused by unsynchronized access to shared account data. Phase 2 eliminates those race conditions with mutex locks. Phase 3 deliberately creates a deadlock through transfer operations that acquire two locks in opposite orders. Phase 4 resolves the deadlock using lock ordering. All programs were developed and tested on a Linux virtual machine and compiled with gcc using the -Wall and -pthread flags.
+
+\section{Phase 1 Approach}
+
+Phase 1 uses five teller threads performing ten random transactions each on three shared accounts. Each transaction is a deposit or withdrawal of a fixed amount. The balance update is written as a deliberate read-modify-write sequence. The thread reads the balance into a temporary variable, sleeps for one hundred microseconds, and then writes the modified value back. The sleep widens the window in which another thread can read the same stale balance, which makes the race condition appear reliably instead of only occasionally.
+
+To prove the results are wrong, each thread also records the net change it intended to make in a private array slot. After all threads are joined, the program compares the sum of intended changes against the actual total balance. Because each thread writes only its own slot, this bookkeeping is itself free of races.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase1a_p1.png}
+    \caption{Phase 1 running with interleaved teller output.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase1b_p1.png}
+    \caption{Phase 1 final report showing a mismatch of 2600.00 caused by lost updates.}
+\end{figure}
+
+In the run shown above, the expected total was 5400.00 but the actual total was 2800.00, a loss of 2600.00 across only fifty transactions. Repeated runs produced different incorrect totals each time, which confirms that the outcome depends on unpredictable thread timing. The transaction count still reached fifty because the counter increments happened to survive, but the balances did not.
+
+\section{Phase 2 Approach}
+
+Phase 2 keeps the same workload and adds a pthread mutex to each account structure. Every mutex is initialized before any thread is created, and every balance update is wrapped in a lock and unlock pair so only one thread can execute the critical section for a given account at a time. The mutexes are destroyed after all threads are joined. The intended net bookkeeping remains outside the lock because it is per-thread data and needs no protection.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase2a_p1.png}
+    \caption{Phase 2 running with mutex protection.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase2b_p1.png}
+    \caption{Phase 2 final report. Expected and actual totals match exactly.}
+\end{figure}
+
+With mutex protection the expected and actual totals matched on every run. The correctness comes at a measurable cost, which is discussed in the performance section.
+
+\section{Phase 3 Approach}
+
+Phase 3 implements a transfer operation that requires locks on two accounts. The transfer locks the source account, sleeps for one hundred microseconds to simulate processing, and then requests the destination account. Two threads run fixed opposing jobs. Thread 0 repeatedly transfers from account 0 to account 1 while thread 1 transfers from account 1 to account 0. The opposite lock acquisition orders make a circular wait nearly certain within the first few iterations.
+
+This scenario satisfies all four Coffman conditions. The mutexes provide mutual exclusion. Holding the source lock while requesting the destination lock is hold and wait. Pthread mutexes cannot be forcibly taken from a thread, so there is no preemption. The opposing acquisition orders create the circular wait.
+
+Detection required a different structure in the main thread. Joining a deadlocked thread would block forever, so the main thread would hang alongside the workers. Instead, worker threads increment a shared progress counter and the main thread polls it once per second. If the counter stops changing for five seconds while threads are still running, the program reports the deadlock, explains which thread holds and waits on which account, and exits.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase3.png}
+    \caption{Phase 3 deadlocking immediately. Both threads hold one account and wait for the other, and the watchdog reports the deadlock after five seconds without progress.}
+\end{figure}
+
+In the run shown, the threads deadlocked before completing a single transfer. The output shows thread 0 holding account 0 while waiting for account 1 and thread 1 holding account 1 while waiting for account 0, which is the circular wait drawn in the course material.
+
+\section{Phase 4 Approach}
+
+Phase 4 runs the identical worst case scenario and resolves it with lock ordering, the strategy of invalidating the circular wait condition by imposing a total order on resource acquisition. The transfer function compares the two account IDs and always locks the lower ID first regardless of transfer direction.
+
+\begin{lstlisting}
+int first  = (from_id < to_id) ? from_id : to_id;
+int second = (from_id < to_id) ? to_id : from_id;
+
+pthread_mutex_lock(&accounts[first].lock);
+usleep(100);
+pthread_mutex_lock(&accounts[second].lock);
+\end{lstlisting}
+
+Because both threads now acquire account 0 before account 1, no thread can ever hold the higher lock while waiting for the lower one, so a cycle cannot form. The transfer arithmetic still uses the original from and to IDs, so money moves in the correct direction. Only the locking order changes.
+
+The phase 3 watchdog was kept in place as evidence. It never fires in phase 4.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{phase4.png}
+    \caption{Phase 4 completing all 200 transfers with correct balances. The failed run above it is discussed in the challenges section.}
+\end{figure}
+
+I chose lock ordering over the timeout and detection alternatives because it prevents deadlock entirely rather than recovering from it, adds no runtime overhead, and fits a system where the full set of resources is known in advance.
+
+\section{Challenges and Solutions}
+
+The largest challenge was that this was my first substantial C program, so several errors came from syntax rules rather than threading logic. My first draft defined the account structure and the thread function inside main, which C does not allow. Moving them to file scope fixed the compilation errors and also turned out to be necessary for sharing, since the accounts array must be visible to every thread. Smaller battles included typing typedof instead of typedef and passing the seed to rand\_r with the wrong operator.
+
+The second challenge was making the race condition in phase 1 appear reliably. A single line balance update ran too quickly to collide often. Splitting the update into an explicit read, a short sleep, and a write widened the race window enough that every run produced incorrect totals.
+
+The third challenge was an instructive bug in phase 4. While retyping the transfer function I wrote pthread\_mutex\_lock twice at the end where the unlocks belonged. Each thread then tried to lock a mutex it already held. Default pthread mutexes are not recursive, so both threads blocked forever waiting on themselves. The watchdog caught it immediately, which demonstrated that the detection mechanism is general. It was built for a circular wait between two threads but it equally detected a self-deadlock, because it only observes the absence of progress rather than the specific cause. The failed run is visible at the top of the phase 4 screenshot.
+
+A final design lesson was that the main thread cannot rely on pthread\_join when deadlock is possible, since joining a stuck thread hangs the whole program. Polling a progress counter marked volatile solved this, with volatile preventing the compiler from caching the counter value while main loops.
+
+\section{Performance Observations}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lrrl}
+        \toprule
+        Phase & Transactions & Time (s) & Notes \\
+        \midrule
+        Phase 1 & 50 & 0.0076 & no locks, incorrect results \\
+        Phase 2 & 50 & 0.0084 & per-account mutexes, correct results \\
+        Phase 4 & 200 & 1.0012 & two locks per transfer, ordered \\
+        \bottomrule
+    \end{tabular}
+    \caption{Measured execution times using clock\_gettime with CLOCK\_MONOTONIC.}
+\end{table}
+
+Phase 2 ran about ten percent slower than phase 1 on the same workload. The sleeps that run concurrently in phase 1 partially serialize in phase 2 whenever two threads contend for the same account, so correctness costs some throughput.
+
+Phase 4 shows the effect more dramatically. Its time is almost exactly one second, which is two hundred transfers multiplied by the one hundred microsecond sleep held inside the critical section. The ordered locking fully serializes the two threads, so the sleeps add up linearly. In a real system the fix would be to shrink the critical section so that slow work happens outside the locks, but for this project the sleep stays inside to preserve the demonstration.
+
+\section{Conclusion}
+
+The four phases build a complete picture of the shared data problem. Unsynchronized access silently corrupts data, mutexes restore correctness at a throughput cost, careless multi-lock acquisition can freeze the system entirely, and a simple global ordering rule removes the deadlock risk without any runtime machinery. The accidental self-deadlock in phase 4 was the most memorable lesson, since it showed that deadlock is not only a product of adversarial thread interleavings but can also come from a one word mistake in otherwise correct code.
+
+\end{document}
