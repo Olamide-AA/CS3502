@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="sheet">
+<header>
+  <h1>Scheduler Lab</h1>
+  <div class="subtitle">Six CPU scheduling algorithms, one workload, side-by-side metrics</div>
+</header>
+
+<h2>Workload</h2>
+<div class="panel">
+  <div class="controls">
+    <div class="field"><label for="count">Processes</label>
+      <input id="count" type="number" value="10" min="1" max="500"></div>
+    <div class="field"><label for="wtype">Type</label>
+      <select id="wtype">
+        <option value="mixed">Mixed</option>
+        <option value="cpu">CPU-bound</option>
+        <option value="io">I/O-bound</option>
+      </select></div>
+    <div class="field"><label for="seed">Seed</label>
+      <input id="seed" type="number" value="1" min="1"></div>
+    <div class="field"><label for="quantum">RR quantum</label>
+      <input id="quantum" type="number" value="2" min="1"></div>
+    <button id="genBtn">Generate workload</button>
+    <button id="addBtn">Add process</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<h2>Process table</h2>
+<div class="panel">
+  <table id="ptable">
+    <thead><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Priority (1 = highest)</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div style="margin-top:14px">
+    <button id="runBtn" class="primary">Run all algorithms</button>
+    <button id="exportBtn" disabled>Export metrics CSV</button>
+  </div>
+</div>
+
+<div id="results" hidden>
+  <h2>Comparison</h2>
+  <div class="panel" style="overflow-x:auto">
+    <table id="cmp"></table>
+    <div style="margin-top:8px;font-size:12.5px;color:var(--muted)">
+      Shaded cells mark the best value per metric. Lower is better for waiting,
+      turnaround, and response. Higher is better for utilization and throughput.
+    </div>
+  </div>
+
+  <h2>Timelines and per-process detail</h2>
+  <div class="panel">
+    <div id="tabs"></div>
+    <div id="panes"></div>
+  </div>
+</div>
+
+<footer>Scheduler Lab compares FCFS, SJF, Priority, and Round Robin with two additions, SRTF and HRRN, on reproducible seeded workloads.</footer>
+</div>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

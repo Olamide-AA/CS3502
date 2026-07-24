@@ -1,0 +1,8 @@
+# 8 processes, RR quantum 2
+Algorithm,AvgWaiting,AvgTurnaround,AvgResponse,CPUUtil,Throughput
+FCFS,5.750,9.000,5.750,96.30,0.29630
+SJF,4.125,7.375,4.125,96.30,0.29630
+Priority,5.500,8.750,5.500,96.30,0.29630
+RR,7.125,10.375,3.000,96.30,0.29630
+SRTF,3.625,6.875,3.125,96.30,0.29630
+HRRN,4.625,7.875,4.625,96.30,0.29630
