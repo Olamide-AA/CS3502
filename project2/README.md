@@ -6,6 +6,9 @@ algorithm logic from the assignment was implemented as a standalone
 JavaScript engine with a custom browser interface, instead of extending
 the provided C# starter.
 
+##Live Demo
+https://olamide-aa.github.io/CS3502/project2/
+
 ## Algorithms
 
 Starter set, reimplemented: **FCFS**, **SJF** (non-preemptive),
